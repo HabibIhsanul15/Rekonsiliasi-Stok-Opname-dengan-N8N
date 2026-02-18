@@ -57,10 +57,11 @@ class CsvImportService
         
         $result = ['total' => 0, 'imported' => 0, 'failed' => 0, 'errors' => []];
         $rowNum = 0;
+        $importedEntries = [];
 
         DB::beginTransaction();
         try {
-            (new FastExcel)->import($fullPath, function ($line) use (&$result, &$rowNum, $session) {
+            (new FastExcel)->import($fullPath, function ($line) use (&$result, &$rowNum, &$importedEntries, $session) {
                 $rowNum++;
                 $result['total']++;
 
@@ -84,19 +85,17 @@ class CsvImportService
                     return;
                 }
 
-                // Find item
-                $item = Item::where('item_code', $itemCode)
-                    ->where('warehouse_id', $session->warehouse_id)
-                    ->first();
+                // Find item globally by code (ignoring warehouse as per request)
+                $item = Item::where('item_code', $itemCode)->first();
 
                 if (!$item) {
                     $result['failed']++;
-                    $result['errors'][] = ['row' => $rowNum, 'message' => "Item '{$itemCode}' not found in department"];
+                    $result['errors'][] = ['row' => $rowNum, 'message' => "Item '{$itemCode}' not found in system (Sync Accurate first)"];
                     return;
                 }
 
                 // Create or update entry
-                OpnameEntry::updateOrCreate(
+                $entry = OpnameEntry::updateOrCreate(
                     [
                         'opname_session_id' => $session->id,
                         'item_id' => $item->id,
@@ -112,8 +111,23 @@ class CsvImportService
                     ]
                 );
 
+                $importedEntries[] = $entry;
                 $result['imported']++;
             });
+
+            // Auto-create variance reviews for all imported entries
+            $varianceService = app(\App\Services\VarianceService::class);
+            foreach ($importedEntries as $entry) {
+                $varianceService->createOrUpdateReview($entry);
+            }
+
+            // Mark session as completed
+            if ($result['imported'] > 0) {
+                $session->update([
+                    'status' => 'completed',
+                    'completed_at' => now(),
+                ]);
+            }
 
             DB::commit();
         } catch (\Exception $e) {

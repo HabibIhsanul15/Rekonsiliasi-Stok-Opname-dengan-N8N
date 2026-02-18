@@ -88,7 +88,19 @@ class WebhookController extends Controller
 
             $entry->calculateVariance();
             $entry->save();
+
+            // Auto-create variance review
+            $this->varianceService->createOrUpdateReview($entry);
+
             $imported++;
+        }
+
+        // Mark session as completed
+        if ($imported > 0) {
+            $session->update([
+                'status' => 'completed',
+                'completed_at' => now(),
+            ]);
         }
 
         ActivityLog::log($session, 'webhook_received', null, [

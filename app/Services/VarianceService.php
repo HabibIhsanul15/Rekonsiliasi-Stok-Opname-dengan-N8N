@@ -15,31 +15,7 @@ class VarianceService
     const THRESHOLD_AUTO_APPROVE = 2;
     const THRESHOLD_SUPERVISOR = 10;
 
-    /**
-     * Process all entries in a session — calculate variance and create reviews
-     */
-    public function processSession(OpnameSession $session): array
-    {
-        $stats = ['total' => 0, 'auto_approved' => 0, 'pending' => 0, 'escalated' => 0];
 
-        $entries = $session->entries()->with('item')->get();
-
-        foreach ($entries as $entry) {
-            $entry->calculateVariance();
-            $entry->save();
-
-            $review = $this->createOrUpdateReview($entry);
-            $stats['total']++;
-            $stats[$this->mapStatusToStat($review->status)]++;
-        }
-
-        // Update session status
-        $session->update(['status' => 'completed', 'completed_at' => now()]);
-
-        ActivityLog::log($session, 'processed', null, $stats);
-
-        return $stats;
-    }
 
     /**
      * Classify severity based on absolute variance

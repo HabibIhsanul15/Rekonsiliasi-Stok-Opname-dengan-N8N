@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\OpnameImport;
 use App\Models\OpnameSession;
 use App\Models\Warehouse;
 use App\Services\CsvImportService;
@@ -13,25 +14,39 @@ class CsvImportController extends Controller
 
     public function index()
     {
-        $sessions = OpnameSession::whereIn('status', ['draft', 'in_progress'])
-            ->with('warehouse')
+        $history = OpnameImport::with(['session.warehouse', 'uploader'])
             ->latest()
-            ->get();
+            ->paginate(10);
 
-        return view('import.index', compact('sessions'));
+        return view('import.index', compact('history'));
     }
 
     public function upload(Request $request)
     {
         $request->validate([
             'csv_file' => 'required|file|mimes:csv,txt,xlsx,xls|max:10240', // 10MB
-            'session_id' => 'required|exists:opname_sessions,id',
         ]);
 
         $file = $request->file('csv_file');
-        $preview = $this->csvImportService->preview($file);
+        
+        // Auto-create session for this import
+        // Default to first active warehouse since user requested no selection
+        $warehouse = Warehouse::active()->first();
+        if (!$warehouse) {
+             return back()->with('error', 'Tidak ada gudang aktif ditemukan. Harap buat gudang terlebih dahulu.');
+        }
 
-        $session = OpnameSession::with('warehouse')->findOrFail($request->session_id);
+        $sessionCode = 'IMP-' . now()->format('YmdHis');
+        $session = OpnameSession::create([
+            'session_code' => $sessionCode,
+            'warehouse_id' => $warehouse->id,
+            'conducted_by' => auth()->id(),
+            'status' => 'in_progress',
+            'started_at' => now(),
+            'notes' => 'Imported via CSV Upload',
+        ]);
+
+        $preview = $this->csvImportService->preview($file);
 
         // Store the file temporarily for the process step
         $tempPath = $file->store('temp', 'local');
@@ -67,6 +82,6 @@ class CsvImportController extends Controller
         }
 
         return redirect()->route('opname-sessions.show', $session)
-            ->with('success', "Import selesai: {$import->imported_rows} berhasil, {$import->failed_rows} gagal dari {$import->total_rows} total.");
+            ->with('success', "Import selesai: {$import->imported_rows} berhasil, {$import->failed_rows} gagal dari {$import->total_rows} total. Variance otomatis diproses.");
     }
 }

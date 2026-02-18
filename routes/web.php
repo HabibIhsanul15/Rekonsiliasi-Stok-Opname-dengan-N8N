@@ -3,7 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OpnameSessionController;
-use App\Http\Controllers\OpnameEntryController;
+
 use App\Http\Controllers\VarianceReviewController;
 use App\Http\Controllers\CsvImportController;
 use App\Http\Controllers\WebhookController;
@@ -24,17 +24,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    
+    // Redirect old session index to import page
+    Route::redirect('/opname-sessions', '/import');
 
-    // Opname Sessions
-    Route::resource('opname-sessions', OpnameSessionController::class);
-    Route::post('opname-sessions/{opname_session}/start', [OpnameSessionController::class, 'start'])->name('opname-sessions.start');
-    Route::post('opname-sessions/{opname_session}/process', [OpnameSessionController::class, 'process'])->name('opname-sessions.process');
-
-    // Opname Entries (nested under sessions)
-    Route::post('opname-sessions/{opname_session}/entries', [OpnameEntryController::class, 'store'])->name('entries.store');
-    Route::put('opname-sessions/{opname_session}/entries/{entry}', [OpnameEntryController::class, 'update'])->name('entries.update');
-    Route::delete('opname-sessions/{opname_session}/entries/{entry}', [OpnameEntryController::class, 'destroy'])->name('entries.destroy');
-    Route::post('opname-sessions/{opname_session}/entries/bulk', [OpnameEntryController::class, 'bulkStore'])->name('entries.bulk');
+    // Opname Sessions (read-only — sessions dibuat otomatis oleh N8N)
+    Route::resource('opname-sessions', OpnameSessionController::class)->only(['show']);
 
     // Variance Reviews
     Route::get('/variances', [VarianceReviewController::class, 'index'])->name('variances.index');
