@@ -3,9 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\OpnameSession;
-use App\Models\Warehouse;
 use App\Services\VarianceService;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class OpnameSessionController extends Controller
 {
@@ -13,15 +13,21 @@ class OpnameSessionController extends Controller
 
     public function show(OpnameSession $opnameSession)
     {
-        $opnameSession->load([
-            'warehouse',
-            'conductor',
-            'entries.item',
-            'entries.varianceReview',
+        $opnameSession->load(['conductor', 'entries.item', 'entries.varianceReview', 'varianceReviews']);
+        
+        return Inertia::render('OpnameSessions/Show', [
+            'session' => $opnameSession
         ]);
+    }
 
-        $warehouseItems = $opnameSession->warehouse->items()->orderBy('item_code')->get();
-
-        return view('opname-sessions.show', compact('opnameSession', 'warehouseItems'));
+    public function destroy(OpnameSession $opnameSession)
+    {
+        // Delete related files if any (optional, usually handled by model boot or manually)
+        // Here we just rely on cascade delete for database records
+        // For physical files (imports), could delete them too
+        
+        $opnameSession->delete();
+        
+        return redirect('/import')->with('success', 'Riwayat opname berhasil dihapus.');
     }
 }

@@ -14,10 +14,10 @@ class OpnameEntry extends Model
     ];
 
     protected $casts = [
-        'system_qty' => 'decimal:2',
-        'counted_qty' => 'decimal:2',
-        'variance' => 'decimal:2',
-        'variance_pct' => 'decimal:2',
+        'system_qty' => 'float',
+        'counted_qty' => 'float',
+        'variance' => 'float',
+        'variance_pct' => 'float',
     ];
 
     public function session(): BelongsTo

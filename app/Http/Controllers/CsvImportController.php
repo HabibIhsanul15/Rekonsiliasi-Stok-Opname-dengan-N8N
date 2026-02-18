@@ -2,86 +2,137 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\OpnameImport;
 use App\Models\OpnameSession;
-use App\Models\Warehouse;
-use App\Services\CsvImportService;
+use App\Models\OpnameImport;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
+use App\Services\CsvImportService;
 
 class CsvImportController extends Controller
 {
-    public function __construct(private CsvImportService $csvImportService) {}
+    protected $csvImportService;
+
+    public function __construct(CsvImportService $csvImportService)
+    {
+        $this->csvImportService = $csvImportService;
+    }
 
     public function index()
     {
-        $history = OpnameImport::with(['session.warehouse', 'uploader'])
-            ->latest()
-            ->paginate(10);
-
-        return view('import.index', compact('history'));
+        return Inertia::render('Import/Index', [
+            'imports' => OpnameImport::with(['session', 'uploader'])->latest()->paginate(10),
+        ]);
     }
 
+    /**
+     * Step 1: Upload file, store it temporarily, redirect to preview
+     */
     public function upload(Request $request)
     {
         $request->validate([
-            'csv_file' => 'required|file|mimes:csv,txt,xlsx,xls|max:10240', // 10MB
+            'file' => 'required|file|mimes:csv,txt,xlsx',
+            'opname_date' => 'required|date',
         ]);
 
-        $file = $request->file('csv_file');
-        
-        // Auto-create session for this import
-        // Default to first active warehouse since user requested no selection
-        $warehouse = Warehouse::active()->first();
-        if (!$warehouse) {
-             return back()->with('error', 'Tidak ada gudang aktif ditemukan. Harap buat gudang terlebih dahulu.');
+        $file = $request->file('file');
+        $storedPath = $file->store('imports', 'local');
+
+        // Store upload info in session for the preview & process steps
+        $request->session()->put('import_data', [
+            'file_path' => $storedPath,
+            'file_name' => $file->getClientOriginalName(),
+            'opname_date' => $request->input('opname_date'),
+        ]);
+
+        return redirect()->route('import.preview');
+    }
+
+    /**
+     * Step 2: Show preview page (GET request)
+     */
+    public function preview(Request $request)
+    {
+        $importData = $request->session()->get('import_data');
+
+        if (!$importData) {
+            return redirect()->route('import.index')->with('error', 'Tidak ada file untuk di-preview. Silakan upload ulang.');
         }
 
-        $sessionCode = 'IMP-' . now()->format('YmdHis');
+        $fullPath = storage_path("app/private/{$importData['file_path']}");
+        
+        try {
+            // Create UploadedFile from stored path for preview
+            $uploadedFile = new \Illuminate\Http\UploadedFile(
+                $fullPath,
+                $importData['file_name'],
+                null,
+                null,
+                true
+            );
+            $preview = $this->csvImportService->preview($uploadedFile);
+        } catch (\Exception $e) {
+            $request->session()->forget('import_data');
+            return redirect()->route('import.index')->with('error', 'Gagal membaca file: ' . $e->getMessage());
+        }
+
+        return Inertia::render('Import/Preview', [
+            'preview' => $preview,
+            'fileName' => $importData['file_name'],
+            'opnameDate' => $importData['opname_date'],
+        ]);
+    }
+
+    /**
+     * Step 3: Actually process the import after user confirmation
+     */
+    public function process(Request $request)
+    {
+        $importData = $request->session()->get('import_data');
+
+        if (!$importData) {
+            return redirect()->route('import.index')->with('error', 'Sesi import tidak ditemukan. Silakan upload ulang.');
+        }
+
+        $opnameDate = $importData['opname_date'];
+        $filePath = $importData['file_path'];
+        $fileName = $importData['file_name'];
+
+        // Generate Session Code
+        $dateStr = date('Ymd', strtotime($opnameDate));
+        $count = OpnameSession::whereDate('created_at', today())->count() + 1;
+        $code = "SO-{$dateStr}-" . str_pad($count, 3, '0', STR_PAD_LEFT);
+
         $session = OpnameSession::create([
-            'session_code' => $sessionCode,
-            'warehouse_id' => $warehouse->id,
+            'session_code' => $code,
+            'opname_date' => $opnameDate,
             'conducted_by' => auth()->id(),
             'status' => 'in_progress',
             'started_at' => now(),
-            'notes' => 'Imported via CSV Upload',
+            'notes' => 'Imported via CSV/Excel',
         ]);
 
-        $preview = $this->csvImportService->preview($file);
+        try {
+            $fullPath = storage_path("app/private/{$filePath}");
+            $uploadedFile = new \Illuminate\Http\UploadedFile(
+                $fullPath,
+                $fileName,
+                null,
+                null,
+                true
+            );
 
-        // Store the file temporarily for the process step
-        $tempPath = $file->store('temp', 'local');
+            $import = $this->csvImportService->import($uploadedFile, $session, auth()->id());
 
-        return view('import.preview', compact('preview', 'session', 'tempPath'));
-    }
+            // Clear session data
+            $request->session()->forget('import_data');
 
-    public function process(Request $request)
-    {
-        $request->validate([
-            'session_id' => 'required|exists:opname_sessions,id',
-            'temp_path' => 'required|string',
-        ]);
+            return redirect()->route('opname-sessions.show', $session->id)
+                ->with('success', "Import berhasil! {$import->imported_rows} dari {$import->total_rows} data masuk.");
 
-        $session = OpnameSession::findOrFail($request->session_id);
-        $fullPath = storage_path("app/private/{$request->temp_path}");
-
-        if (!file_exists($fullPath)) {
-            return redirect()->route('import.index')
-                ->with('error', 'File tidak ditemukan. Silakan upload ulang.');
+        } catch (\Exception $e) {
+            $session->update(['status' => 'draft']);
+            $request->session()->forget('import_data');
+            return redirect()->route('import.index')->with('error', 'Gagal memproses file: ' . $e->getMessage());
         }
-
-        // Create UploadedFile from temp path
-        $file = new \Illuminate\Http\UploadedFile($fullPath, basename($fullPath));
-        $import = $this->csvImportService->import($file, $session, auth()->id());
-
-        // Clean temp
-        @unlink($fullPath);
-
-        if ($import->status === 'failed') {
-            return redirect()->route('import.index')
-                ->with('error', 'Import gagal: ' . ($import->errors[0]['message'] ?? 'Kesalahan tidak diketahui'));
-        }
-
-        return redirect()->route('opname-sessions.show', $session)
-            ->with('success', "Import selesai: {$import->imported_rows} berhasil, {$import->failed_rows} gagal dari {$import->total_rows} total. Variance otomatis diproses.");
     }
 }

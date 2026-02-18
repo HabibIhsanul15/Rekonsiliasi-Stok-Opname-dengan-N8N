@@ -3,8 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use App\Models\Warehouse;
 use App\Models\Item;
+use App\Models\ItemUnitConversion;
 use App\Models\OpnameSession;
 use App\Models\OpnameEntry;
 use App\Models\VarianceReview;
@@ -19,7 +19,9 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
+        // ────────────────────────────────────────────
         // Admin user
+        // ────────────────────────────────────────────
         $admin = User::updateOrCreate(
             ['email' => 'admin@stockopname.com'],
             [
@@ -28,23 +30,46 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        // Departemen
-        $dep1 = Warehouse::updateOrCreate(['code' => 'LOTTE'], ['name' => 'Departemen LOTTE', 'location' => 'LOTTE', 'is_active' => true]);
-        $dep2 = Warehouse::updateOrCreate(['code' => 'BEI'], ['name' => 'Departemen BEI', 'location' => 'BEI', 'is_active' => true]);
-
-        // Items for LOTTE
+        // ────────────────────────────────────────────
+        // Items — sesuai data Accurate (tanpa system_stock)
+        // Stok sistem ada di Accurate, bukan di website
+        // ────────────────────────────────────────────
         $items = [
-            ['item_code' => 'ITM-001', 'name' => 'Paper Bag', 'category' => 'Packaging', 'unit' => 'Pcs', 'system_stock' => 130, 'warehouse_id' => $dep1->id],
-            ['item_code' => 'ITM-002', 'name' => 'Cup Paper', 'category' => 'Packaging', 'unit' => 'Pcs', 'system_stock' => 1111, 'warehouse_id' => $dep1->id],
-            ['item_code' => 'ITM-003', 'name' => 'Bean Coffee', 'category' => 'Ingredients', 'unit' => 'Gram', 'system_stock' => 12060, 'warehouse_id' => $dep1->id],
-            ['item_code' => 'ITM-006', 'name' => 'Plastic Lid', 'category' => 'Packaging', 'unit' => 'Pcs', 'system_stock' => 500, 'warehouse_id' => $dep1->id],
-            ['item_code' => 'ITM-007', 'name' => 'Sugar Syrup', 'category' => 'Ingredients', 'unit' => 'ml', 'system_stock' => 5000, 'warehouse_id' => $dep1->id],
-            // BEI Items
-            ['item_code' => 'ITM-004', 'name' => 'Whipping Cream', 'category' => 'Ingredients', 'unit' => 'ml', 'system_stock' => 11000, 'warehouse_id' => $dep2->id],
-            ['item_code' => 'ITM-005', 'name' => 'Cheese Blueberry', 'category' => 'Food', 'unit' => 'Pcs', 'system_stock' => 35, 'warehouse_id' => $dep2->id],
-            ['item_code' => 'ITM-008', 'name' => 'Chocolate Powder', 'category' => 'Ingredients', 'unit' => 'Gram', 'system_stock' => 8000, 'warehouse_id' => $dep2->id],
-            ['item_code' => 'ITM-009', 'name' => 'Matcha Powder', 'category' => 'Ingredients', 'unit' => 'Gram', 'system_stock' => 3000, 'warehouse_id' => $dep2->id],
-            ['item_code' => 'ITM-010', 'name' => 'Napkin Tissue', 'category' => 'Supplies', 'unit' => 'Pack', 'system_stock' => 200, 'warehouse_id' => $dep2->id],
+            [
+                'item_code'      => '100001',
+                'name'           => 'Paper Bag',
+                'jenis_barang'   => 'Persediaan',
+                'kategori_barang'=> 'Umum',
+                'unit'           => 'PCS',
+            ],
+            [
+                'item_code'      => '100002',
+                'name'           => 'Cup Paper',
+                'jenis_barang'   => 'Persediaan',
+                'kategori_barang'=> 'Umum',
+                'unit'           => 'PCS',
+            ],
+            [
+                'item_code'      => '100003',
+                'name'           => 'whipping cream',
+                'jenis_barang'   => 'Persediaan',
+                'kategori_barang'=> 'Umum',
+                'unit'           => 'ml',
+            ],
+            [
+                'item_code'      => '100004',
+                'name'           => 'Bean Coffee',
+                'jenis_barang'   => 'Persediaan',
+                'kategori_barang'=> 'Umum',
+                'unit'           => 'gr',
+            ],
+            [
+                'item_code'      => '100005',
+                'name'           => 'Cheese blueberry',
+                'jenis_barang'   => 'Persediaan',
+                'kategori_barang'=> 'Umum',
+                'unit'           => 'PCS',
+            ],
         ];
 
         foreach ($items as $item) {
@@ -52,55 +77,84 @@ class DatabaseSeeder extends Seeder
         }
 
         // ────────────────────────────────────────────
+        // Konversi Satuan — sesuai Accurate
+        // ────────────────────────────────────────────
+        $conversions = [
+            '100001' => [
+                ['unit_name' => 'Pack', 'conversion_qty' => 25],
+            ],
+            '100003' => [
+                ['unit_name' => 'liter', 'conversion_qty' => 1000],
+                ['unit_name' => 'ctn', 'conversion_qty' => 12000],
+            ],
+            '100004' => [
+                ['unit_name' => 'pouch', 'conversion_qty' => 545],
+            ],
+        ];
+
+        foreach ($conversions as $itemCode => $units) {
+            $item = Item::where('item_code', $itemCode)->first();
+            if ($item) {
+                foreach ($units as $unit) {
+                    ItemUnitConversion::updateOrCreate(
+                        ['item_id' => $item->id, 'unit_name' => $unit['unit_name']],
+                        ['conversion_qty' => $unit['conversion_qty']]
+                    );
+                }
+            }
+        }
+
+        // ────────────────────────────────────────────
         // Dummy Opname Sessions + Entries + Reviews
-        // (Simulating data that would come from N8N)
+        // Simulasi: N8N sudah push hasil rekonsiliasi
+        // system_qty diambil dari Accurate oleh N8N
         // ────────────────────────────────────────────
 
-        // Session 1: Completed - LOTTE
+        // Session 1: Completed — Opname Pagi
         $session1 = OpnameSession::updateOrCreate(
             ['session_code' => 'SO-20260218-001'],
             [
-                'warehouse_id' => $dep1->id,
                 'conducted_by' => $admin->id,
                 'status' => 'completed',
                 'started_at' => now()->subHours(5),
                 'completed_at' => now()->subHours(3),
-                'notes' => 'Opname rutin harian via N8N - LOTTE',
+                'notes' => 'Opname rutin pagi — hasil dari N8N',
             ]
         );
 
-        // Session 2: Completed - BEI  
+        // Session 2: Completed — Opname Sore
         $session2 = OpnameSession::updateOrCreate(
             ['session_code' => 'SO-20260218-002'],
             [
-                'warehouse_id' => $dep2->id,
                 'conducted_by' => $admin->id,
                 'status' => 'completed',
                 'started_at' => now()->subHours(4),
                 'completed_at' => now()->subHours(2),
-                'notes' => 'Opname rutin harian via N8N - BEI',
+                'notes' => 'Opname rutin sore — hasil dari N8N',
             ]
         );
 
-        // Entries for Session 1 (LOTTE) - simulating variance from Accurate
-        $lotteItems = Item::where('warehouse_id', $dep1->id)->get();
-        $lotteVariances = [
-            'ITM-001' => 125,   // -5 (low)
-            'ITM-002' => 1100,  // -11 (medium)
-            'ITM-003' => 11800, // -260 (critical)
-            'ITM-006' => 498,   // -2 (low, auto-approve)
-            'ITM-007' => 4950,  // -50 (high)
+        // Entries Session 1 — system_qty dari Accurate (via N8N)
+        $session1Data = [
+            // [item_code, counted_qty, system_qty_dari_accurate]
+            ['100001', 128, 130],     // Paper Bag: -2
+            ['100002', 1100, 1111],   // Cup Paper: -11
+            ['100004', 12000, 12060], // Bean Coffee: -60 gr
         ];
 
-        foreach ($lotteItems as $item) {
-            $counted = $lotteVariances[$item->item_code] ?? $item->system_stock;
-            $variance = $counted - $item->system_stock;
-            $variancePct = $item->system_stock != 0 ? round($variance / $item->system_stock * 100, 2) : 0;
+        foreach ($session1Data as [$code, $counted, $systemQty]) {
+            $item = Item::where('item_code', $code)->first();
+            if (!$item) continue;
+
+            $variance = $counted - $systemQty;
+            $variancePct = $systemQty != 0
+                ? round($variance / $systemQty * 100, 2)
+                : 0;
 
             $entry = OpnameEntry::updateOrCreate(
                 ['opname_session_id' => $session1->id, 'item_id' => $item->id],
                 [
-                    'system_qty' => $item->system_stock,
+                    'system_qty' => $systemQty,
                     'counted_qty' => $counted,
                     'variance' => $variance,
                     'variance_pct' => $variancePct,
@@ -108,7 +162,6 @@ class DatabaseSeeder extends Seeder
                 ]
             );
 
-            // Create variance review
             $absVariance = abs($variance);
             $severity = $absVariance <= 2 ? 'low' : ($absVariance <= 5 ? 'medium' : ($absVariance <= 10 ? 'high' : 'critical'));
             $status = $absVariance <= 2 ? 'auto_approved' : ($absVariance <= 10 ? 'pending' : 'escalated');
@@ -120,30 +173,29 @@ class DatabaseSeeder extends Seeder
                     'status' => $status,
                     'auto_resolved' => $status === 'auto_approved',
                     'reviewed_at' => $status === 'auto_approved' ? now()->subHours(3) : null,
-                    'reviewed_by' => $status === 'auto_approved' ? null : null,
                 ]
             );
         }
 
-        // Entries for Session 2 (BEI)  
-        $beiItems = Item::where('warehouse_id', $dep2->id)->get();
-        $beiVariances = [
-            'ITM-004' => 10800, // -200 (critical)
-            'ITM-005' => 33,    // -2 (low, auto)
-            'ITM-008' => 7990,  // -10 (high)
-            'ITM-009' => 3000,  // 0 (no variance)
-            'ITM-010' => 195,   // -5 (medium)
+        // Entries Session 2 — system_qty dari Accurate (via N8N)
+        $session2Data = [
+            ['100003', 10800, 11000], // whipping cream: -200 ml
+            ['100005', 35, 35],       // Cheese blueberry: 0 (sesuai)
         ];
 
-        foreach ($beiItems as $item) {
-            $counted = $beiVariances[$item->item_code] ?? $item->system_stock;
-            $variance = $counted - $item->system_stock;
-            $variancePct = $item->system_stock != 0 ? round($variance / $item->system_stock * 100, 2) : 0;
+        foreach ($session2Data as [$code, $counted, $systemQty]) {
+            $item = Item::where('item_code', $code)->first();
+            if (!$item) continue;
+
+            $variance = $counted - $systemQty;
+            $variancePct = $systemQty != 0
+                ? round($variance / $systemQty * 100, 2)
+                : 0;
 
             $entry = OpnameEntry::updateOrCreate(
                 ['opname_session_id' => $session2->id, 'item_id' => $item->id],
                 [
-                    'system_qty' => $item->system_stock,
+                    'system_qty' => $systemQty,
                     'counted_qty' => $counted,
                     'variance' => $variance,
                     'variance_pct' => $variancePct,
@@ -171,24 +223,24 @@ class DatabaseSeeder extends Seeder
             'loggable_type' => OpnameSession::class,
             'loggable_id' => $session1->id,
             'action' => 'webhook_received',
-            'metadata' => ['imported' => 5, 'errors' => []],
+            'metadata' => ['imported' => 3, 'errors' => []],
             'created_at' => now()->subHours(3),
         ]);
         ActivityLog::create([
             'loggable_type' => OpnameSession::class,
             'loggable_id' => $session2->id,
             'action' => 'webhook_received',
-            'metadata' => ['imported' => 5, 'errors' => []],
+            'metadata' => ['imported' => 2, 'errors' => []],
             'created_at' => now()->subHours(2),
         ]);
 
-        // Dummy Import History (Simulating previous CSV uploads)
+        // Dummy Import History
         \App\Models\OpnameImport::create([
             'opname_session_id' => $session1->id,
-            'file_name' => 'lotte_stock_feb18.csv',
-            'file_path' => 'imports/dummy_lotte.csv',
-            'total_rows' => 5,
-            'imported_rows' => 5,
+            'file_name' => 'stock_feb18_pagi.csv',
+            'file_path' => 'imports/dummy_1.csv',
+            'total_rows' => 3,
+            'imported_rows' => 3,
             'failed_rows' => 0,
             'status' => 'completed',
             'uploaded_by' => $admin->id,
@@ -197,16 +249,16 @@ class DatabaseSeeder extends Seeder
 
         \App\Models\OpnameImport::create([
             'opname_session_id' => $session2->id,
-            'file_name' => 'bei_stock_feb18.xlsx',
-            'file_path' => 'imports/dummy_bei.xlsx',
-            'total_rows' => 5,
-            'imported_rows' => 5,
+            'file_name' => 'stock_feb18_sore.xlsx',
+            'file_path' => 'imports/dummy_2.xlsx',
+            'total_rows' => 2,
+            'imported_rows' => 2,
             'failed_rows' => 0,
             'status' => 'completed',
             'uploaded_by' => $admin->id,
             'created_at' => now()->subHours(2),
         ]);
 
-        $this->command->info('Seeded: users, warehouses, items, 2 sessions, 10 entries, variance reviews, activity logs, import history.');
+        $this->command->info('✅ Seeded: admin, 5 items (Accurate), konversi satuan, 2 sessions, 5 entries, reviews, logs.');
     }
 }

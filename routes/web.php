@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\OpnameSessionController;
+use App\Http\Controllers\ItemController;
 
 use App\Http\Controllers\VarianceReviewController;
 use App\Http\Controllers\CsvImportController;
@@ -28,8 +29,12 @@ Route::middleware('auth')->group(function () {
     // Redirect old session index to import page
     Route::redirect('/opname-sessions', '/import');
 
-    // Opname Sessions (read-only — sessions dibuat otomatis oleh N8N)
-    Route::resource('opname-sessions', OpnameSessionController::class)->only(['show']);
+    // Items CRUD
+    Route::resource('items', ItemController::class);
+
+    // Opname Sessions
+    Route::get('/opname-sessions/{opnameSession}', [OpnameSessionController::class, 'show'])->name('opname-sessions.show');
+    Route::delete('/opname-sessions/{opnameSession}', [OpnameSessionController::class, 'destroy'])->name('opname-sessions.destroy');
 
     // Variance Reviews
     Route::get('/variances', [VarianceReviewController::class, 'index'])->name('variances.index');
@@ -39,6 +44,7 @@ Route::middleware('auth')->group(function () {
     // CSV Import
     Route::get('/import', [CsvImportController::class, 'index'])->name('import.index');
     Route::post('/import/upload', [CsvImportController::class, 'upload'])->name('import.upload');
+    Route::get('/import/preview', [CsvImportController::class, 'preview'])->name('import.preview');
     Route::post('/import/process', [CsvImportController::class, 'process'])->name('import.process');
 
     // Analytics

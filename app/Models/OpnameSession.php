@@ -10,19 +10,20 @@ use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 class OpnameSession extends Model
 {
     protected $fillable = [
-        'session_code', 'warehouse_id', 'conducted_by',
-        'status', 'started_at', 'completed_at', 'notes',
+        'session_code',
+        'opname_date',
+        'conducted_by',
+        'status',
+        'started_at',
+        'completed_at',
+        'notes',
     ];
 
     protected $casts = [
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
+        'opname_date' => 'date',
     ];
-
-    public function warehouse(): BelongsTo
-    {
-        return $this->belongsTo(Warehouse::class);
-    }
 
     public function conductor(): BelongsTo
     {

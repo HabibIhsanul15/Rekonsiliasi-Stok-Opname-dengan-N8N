@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\VarianceReview;
-use App\Models\Warehouse;
+
 use App\Services\VarianceService;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class VarianceReviewController extends Controller
 {
@@ -15,20 +16,16 @@ class VarianceReviewController extends Controller
     {
         $reviews = VarianceReview::with([
             'opnameEntry.item',
-            'opnameEntry.session.warehouse',
             'reviewer',
         ])
             ->when($request->severity, fn($q, $s) => $q->where('severity', $s))
             ->when($request->status, fn($q, $s) => $q->where('status', $s))
-            ->when($request->warehouse_id, function ($q, $w) {
-                $q->whereHas('opnameEntry.session', fn($sq) => $sq->where('warehouse_id', $w));
-            })
             ->latest()
             ->paginate(20);
 
-        $warehouses = Warehouse::active()->get();
-
-        return view('variances.index', compact('reviews', 'warehouses'));
+        return Inertia::render('Variances/Index', [
+            'reviews' => $reviews,
+        ]);
     }
 
     public function approve(Request $request, VarianceReview $review)

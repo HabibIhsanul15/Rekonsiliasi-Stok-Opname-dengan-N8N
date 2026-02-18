@@ -14,14 +14,14 @@ class WebhookController extends Controller
     public function __construct(private VarianceService $varianceService) {}
 
     /**
-     * Receive opname data from n8n webhook
+     * Receive opname/reconciliation results from n8n webhook
      *
-     * Expected payload:
+     * Expected payload (hasil rekonsiliasi dari N8N):
      * {
      *   "session_code": "SO-20260218-001",  // optional, will create new if not provided
-     *   "warehouse_code": "WH-001",
      *   "items": [
-     *     {"item_code": "ITM-001", "counted_qty": 100, "notes": "optional"},
+     *     {"item_code": "100001", "counted_qty": 128, "system_qty": 130, "notes": "kurang 2"},
+     *     {"item_code": "100002", "counted_qty": 1100, "system_qty": 1111, "notes": "selisih 11"},
      *     ...
      *   ]
      * }
@@ -35,15 +35,13 @@ class WebhookController extends Controller
         }
 
         $validated = $request->validate([
-            'warehouse_code' => 'required|string|exists:warehouses,code',
             'session_code' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.item_code' => 'required|string',
             'items.*.counted_qty' => 'required|numeric|min:0',
+            'items.*.system_qty' => 'nullable|numeric|min:0',
             'items.*.notes' => 'nullable|string',
         ]);
-
-        $warehouse = \App\Models\Warehouse::where('code', $validated['warehouse_code'])->firstOrFail();
 
         // Find or create session
         $session = null;
@@ -54,7 +52,6 @@ class WebhookController extends Controller
         if (!$session) {
             $session = OpnameSession::create([
                 'session_code' => $validated['session_code'] ?? OpnameSession::generateCode(),
-                'warehouse_id' => $warehouse->id,
                 'conducted_by' => 1, // system user
                 'status' => 'in_progress',
                 'started_at' => now(),
@@ -65,14 +62,19 @@ class WebhookController extends Controller
         $errors = [];
 
         foreach ($validated['items'] as $itemData) {
-            $item = Item::where('item_code', $itemData['item_code'])
-                ->where('warehouse_id', $warehouse->id)
-                ->first();
+            $item = Item::where('item_code', $itemData['item_code'])->first();
 
             if (!$item) {
-                $errors[] = "Item '{$itemData['item_code']}' not found in warehouse {$warehouse->code}";
+                $errors[] = "Item '{$itemData['item_code']}' not found in system";
                 continue;
             }
+
+            $systemQty = $itemData['system_qty'] ?? 0;
+            $countedQty = $itemData['counted_qty'];
+            $variance = $countedQty - $systemQty;
+            $variancePct = $systemQty != 0
+                ? round($variance / $systemQty * 100, 2)
+                : 0;
 
             $entry = OpnameEntry::updateOrCreate(
                 [
@@ -80,14 +82,13 @@ class WebhookController extends Controller
                     'item_id' => $item->id,
                 ],
                 [
-                    'system_qty' => $item->system_stock,
-                    'counted_qty' => $itemData['counted_qty'],
+                    'system_qty' => $systemQty,
+                    'counted_qty' => $countedQty,
+                    'variance' => $variance,
+                    'variance_pct' => $variancePct,
                     'notes' => $itemData['notes'] ?? null,
                 ]
             );
-
-            $entry->calculateVariance();
-            $entry->save();
 
             // Auto-create variance review
             $this->varianceService->createOrUpdateReview($entry);
@@ -126,17 +127,17 @@ class WebhookController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $items = Item::with('warehouse')
-            ->when($request->warehouse_code, function ($q, $code) {
-                $q->whereHas('warehouse', fn($wq) => $wq->where('code', $code));
-            })
-            ->get()
+        $items = Item::with('unitConversions')->get()
             ->map(fn($item) => [
                 'item_code' => $item->item_code,
                 'name' => $item->name,
-                'system_stock' => $item->system_stock,
+                'jenis_barang' => $item->jenis_barang,
+                'kategori_barang' => $item->kategori_barang,
                 'unit' => $item->unit,
-                'warehouse_code' => $item->warehouse->code,
+                'unit_conversions' => $item->unitConversions->map(fn($c) => [
+                    'unit_name' => $c->unit_name,
+                    'conversion_qty' => $c->conversion_qty,
+                ]),
             ]);
 
         return response()->json(['items' => $items]);

@@ -94,19 +94,18 @@ class CsvImportService
                     return;
                 }
 
-                // Create or update entry
+                // Create or update entry — only store counted_qty
+                // N8N will later pull this data and compare with Accurate's stock
                 $entry = OpnameEntry::updateOrCreate(
                     [
                         'opname_session_id' => $session->id,
                         'item_id' => $item->id,
                     ],
                     [
-                        'system_qty' => $item->system_stock,
+                        'system_qty' => 0, // akan diisi oleh N8N dari Accurate
                         'counted_qty' => (float) $countedQty,
-                        'variance' => (float) $countedQty - (float) $item->system_stock,
-                        'variance_pct' => $item->system_stock != 0
-                            ? round(((float) $countedQty - (float) $item->system_stock) / (float) $item->system_stock * 100, 2)
-                            : 0,
+                        'variance' => 0,   // akan dihitung oleh N8N
+                        'variance_pct' => 0, // akan dihitung oleh N8N
                         'notes' => $notes,
                     ]
                 );
@@ -140,38 +139,33 @@ class CsvImportService
 
     /**
      * Preview file contents (first N rows)
+     * 
+     * OpenSpout requires the correct file extension to determine reader type.
+     * PHP temp uploads use .tmp extension, so we copy to a temp file with the original extension.
      */
     public function preview(UploadedFile $file, int $maxRows = 10): array
     {
-        $path = $file->getRealPath();
         $rows = [];
         $headers = [];
         $total = 0;
 
-        // Use import with a limit? FastExcel doesn't have a simple limit on import without iterating.
-        // But for preview we can just manually iterate or use the collection approach for small preview.
-        // FastExcel import returns a collection if no callback.
+        // Copy to temp file with correct extension so OpenSpout can detect format
+        $extension = $file->getClientOriginalExtension() ?: 'csv';
+        $tempFile = tempnam(sys_get_temp_dir(), 'opname_') . '.' . $extension;
+        copy($file->getRealPath(), $tempFile);
         
-        // However, if we want to just read N rows without loading whole file if it's huge:
-        // We can throw exception to stop, or just use the iterator manually if exposed?
-        // FastExcel doesn't expose iterator easily on `import`.
-        // But `(new FastExcel)->sheet(1)->import($path)` returns collection.
-        // Let's blindly use import and take(10) - might be slow for huge files but acceptable for preview.
-        // Optimally: use OpenSpout reader directly. But for simplicity let's rely on FastExcel.
-        // Wait, better approach: use a callback and return false/exception? 
-        // No, let's just use `(new FastExcel)->import($path)->take($maxRows)`. It reads everything first though.
-        
-        // Actually: `(new FastExcel)->configureCsv(';', '}', '\n', 'gbk')->import($file)`
-        // Ideally we shouldn't read whole file for preview.
-        // We can replicate the logic:
-        
-        $collection = (new FastExcel)->import($path);
-        $total = $collection->count();
-        $preview = $collection->take($maxRows);
-        
-        if ($preview->count() > 0) {
-            $headers = array_keys($preview->first());
-            $rows = $preview->toArray();
+        try {
+            $collection = (new FastExcel)->import($tempFile);
+            $total = $collection->count();
+            $preview = $collection->take($maxRows);
+            
+            if ($preview->count() > 0) {
+                $headers = array_keys($preview->first());
+                $rows = array_values($preview->toArray());
+            }
+        } finally {
+            // Always clean up temp file
+            @unlink($tempFile);
         }
 
         return ['headers' => $headers, 'rows' => $rows, 'total' => $total];
