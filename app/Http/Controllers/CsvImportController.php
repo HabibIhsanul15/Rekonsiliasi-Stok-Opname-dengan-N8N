@@ -97,13 +97,8 @@ class CsvImportController extends Controller
         $filePath = $importData['file_path'];
         $fileName = $importData['file_name'];
 
-        // Generate Session Code
-        $dateStr = date('Ymd', strtotime($opnameDate));
-        $count = OpnameSession::whereDate('created_at', today())->count() + 1;
-        $code = "SO-{$dateStr}-" . str_pad($count, 3, '0', STR_PAD_LEFT);
-
         $session = OpnameSession::create([
-            'session_code' => $code,
+            'session_code' => OpnameSession::generateCode(),
             'opname_date' => $opnameDate,
             'conducted_by' => auth()->id(),
             'status' => 'in_progress',

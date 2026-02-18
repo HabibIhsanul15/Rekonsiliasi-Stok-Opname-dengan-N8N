@@ -34,6 +34,7 @@ Route::middleware('auth')->group(function () {
 
     // Opname Sessions
     Route::get('/opname-sessions/{opnameSession}', [OpnameSessionController::class, 'show'])->name('opname-sessions.show');
+    Route::post('/opname-sessions/{opnameSession}/complete', [OpnameSessionController::class, 'complete'])->name('opname-sessions.complete');
     Route::delete('/opname-sessions/{opnameSession}', [OpnameSessionController::class, 'destroy'])->name('opname-sessions.destroy');
 
     // Variance Reviews
@@ -53,6 +54,7 @@ Route::middleware('auth')->group(function () {
 
 // Webhook (no web auth — token-based)
 Route::post('/api/webhook/opname', [WebhookController::class, 'receive'])->name('webhook.opname');
+Route::get('/api/webhook/opname/{opnameSession}', [WebhookController::class, 'sessionEntries'])->name('webhook.opname.entries');
 Route::get('/api/webhook/system-stock', [WebhookController::class, 'systemStock'])->name('webhook.system-stock');
 
 require __DIR__.'/auth.php';

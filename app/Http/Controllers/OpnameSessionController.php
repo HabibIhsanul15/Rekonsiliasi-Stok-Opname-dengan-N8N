@@ -20,12 +20,22 @@ class OpnameSessionController extends Controller
         ]);
     }
 
+    /**
+     * Mark session as completed (after reconciliation)
+     */
+    public function complete(OpnameSession $opnameSession)
+    {
+        $opnameSession->update([
+            'status' => 'completed',
+            'completed_at' => now(),
+        ]);
+
+        return redirect()->route('opname-sessions.show', $opnameSession->id)
+            ->with('success', 'Sesi opname berhasil diselesaikan.');
+    }
+
     public function destroy(OpnameSession $opnameSession)
     {
-        // Delete related files if any (optional, usually handled by model boot or manually)
-        // Here we just rely on cascade delete for database records
-        // For physical files (imports), could delete them too
-        
         $opnameSession->delete();
         
         return redirect('/import')->with('success', 'Riwayat opname berhasil dihapus.');

@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import AppLayout from '@/Layouts/AppLayout';
 import Badge, { statusVariant, statusLabels, severityVariant } from '@/Components/Badge';
 
@@ -52,6 +52,18 @@ export default function Show({ session }: ShowProps) {
     const varianceEntries = session.entries?.filter(e => e.variance !== 0) || [];
     const totalVariance = varianceEntries.reduce((sum, e) => sum + Math.abs(e.variance), 0);
 
+    const handleComplete = () => {
+        if (confirm('Apakah Anda yakin ingin menyelesaikan sesi opname ini? Status akan berubah menjadi "Selesai".')) {
+            router.post(`/opname-sessions/${session.id}/complete`);
+        }
+    };
+
+    const handleDelete = () => {
+        if (confirm('Apakah Anda yakin ingin menghapus sesi opname ini? Semua data terkait akan dihapus.')) {
+            router.delete(`/opname-sessions/${session.id}`);
+        }
+    };
+
     return (
         <AppLayout
             header={<h2 className="font-semibold text-xl text-slate-200 leading-tight">Detail Opname</h2>}
@@ -99,6 +111,32 @@ export default function Show({ session }: ShowProps) {
                                 <p className="text-sm text-slate-300">{session.notes}</p>
                             </div>
                         )}
+
+                        {/* Action Buttons */}
+                        <div className="mt-6 flex flex-wrap gap-3 border-t border-white/[0.06] pt-6">
+                            {session.status === 'in_progress' && (
+                                <button
+                                    onClick={handleComplete}
+                                    className="btn-primary"
+                                >
+                                    ✓ Selesaikan Rekonsiliasi
+                                </button>
+                            )}
+
+                            {session.status === 'completed' && (
+                                <div className="flex items-center gap-2 text-sm text-emerald-400">
+                                    <span>✓</span>
+                                    <span>Rekonsiliasi selesai pada {session.completed_at ? new Date(session.completed_at).toLocaleDateString('id-ID') : '-'}</span>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleDelete}
+                                className="px-4 py-2 rounded-xl text-sm font-medium text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 hover:bg-red-500/10 transition-all"
+                            >
+                                Hapus Sesi
+                            </button>
+                        </div>
                     </div>
 
                     {/* Entries Table */}

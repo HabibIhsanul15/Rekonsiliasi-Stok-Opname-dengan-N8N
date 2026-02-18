@@ -96,13 +96,7 @@ class WebhookController extends Controller
             $imported++;
         }
 
-        // Mark session as completed
-        if ($imported > 0) {
-            $session->update([
-                'status' => 'completed',
-                'completed_at' => now(),
-            ]);
-        }
+        // Session stays 'in_progress' — user completes it manually after reviewing variance data
 
         ActivityLog::log($session, 'webhook_received', null, [
             'imported' => $imported,
@@ -142,4 +136,34 @@ class WebhookController extends Controller
 
         return response()->json(['items' => $items]);
     }
+    
+    public function sessionEntries(Request $request, OpnameSession $opnameSession)
+{
+    // Auth sederhana pakai header X-API-KEY (biar tidak bisa diakses sembarang orang)
+    $key = $request->header('X-API-KEY') ?? $request->query('token');
+    abort_unless($key && hash_equals((string) env('N8N_API_KEY'), (string) $key), 401, 'Unauthorized');
+
+    $entries = OpnameEntry::query()
+        ->where('opname_session_id', $opnameSession->id)
+        ->join('items', 'items.id', '=', 'opname_entries.item_id')
+        ->orderBy('opname_entries.id')
+        ->get([
+            'opname_entries.id as entry_id',
+            'items.item_code',
+            'items.name as item_name',
+            'items.unit',
+            'opname_entries.counted_qty',
+            'opname_entries.notes',
+        ]);
+
+    return response()->json([
+        'session' => [
+            'id' => $opnameSession->id,
+            'session_code' => $opnameSession->session_code,
+            'opname_date' => $opnameSession->opname_date,
+            'status' => $opnameSession->status,
+        ],
+        'entries' => $entries,
+    ]);
+}
 }

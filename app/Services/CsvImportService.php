@@ -114,19 +114,21 @@ class CsvImportService
                 $result['imported']++;
             });
 
-            // Auto-create variance reviews for all imported entries
-            $varianceService = app(\App\Services\VarianceService::class);
+            // Create variance reviews with 'pending' status.
+            // system_qty is still 0, so we can't calculate real variance yet.
+            // These will be updated when N8N sends system stock data.
             foreach ($importedEntries as $entry) {
-                $varianceService->createOrUpdateReview($entry);
+                \App\Models\VarianceReview::updateOrCreate(
+                    ['opname_entry_id' => $entry->id],
+                    [
+                        'severity' => 'medium',       // default until real variance is calculated
+                        'status' => 'pending',         // awaiting system stock data / reconciliation
+                        'auto_resolved' => false,
+                    ]
+                );
             }
 
-            // Mark session as completed
-            if ($result['imported'] > 0) {
-                $session->update([
-                    'status' => 'completed',
-                    'completed_at' => now(),
-                ]);
-            }
+            // Session stays as 'in_progress' — user marks it as 'completed' after reconciliation
 
             DB::commit();
         } catch (\Exception $e) {
