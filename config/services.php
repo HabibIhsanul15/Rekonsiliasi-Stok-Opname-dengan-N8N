@@ -36,6 +36,8 @@ return [
     ],
 
     'n8n' => [
+        'webhook_url'   => env('N8N_WEBHOOK_URL'),
+        'enabled'       => env('N8N_WEBHOOK_ENABLED', true),
         'webhook_token' => env('N8N_WEBHOOK_TOKEN'),
     ],
 

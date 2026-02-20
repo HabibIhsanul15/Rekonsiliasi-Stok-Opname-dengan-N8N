@@ -36,10 +36,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/opname-sessions/{opnameSession}', [OpnameSessionController::class, 'show'])->name('opname-sessions.show');
     Route::delete('/opname-sessions/{opnameSession}', [OpnameSessionController::class, 'destroy'])->name('opname-sessions.destroy');
 
-    // Variance Reviews
+    // Variance Reviews (Simplified List)
     Route::get('/variances', [VarianceReviewController::class, 'index'])->name('variances.index');
-    Route::post('/variances/{review}/approve', [VarianceReviewController::class, 'approve'])->name('variances.approve');
-    Route::post('/variances/{review}/reject', [VarianceReviewController::class, 'reject'])->name('variances.reject');
 
     // CSV Import
     Route::get('/import', [CsvImportController::class, 'index'])->name('import.index');
