@@ -47,7 +47,10 @@ export interface OpnameEntry {
     variance: number;
     variance_pct: number;
     notes: string | null;
+    created_at: string;
+    opname_date_formatted?: string;
     item: Item;
+    session?: OpnameSession;
     varianceReview: VarianceReview | null;
 }
 

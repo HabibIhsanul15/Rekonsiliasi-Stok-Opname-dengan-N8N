@@ -10,47 +10,30 @@ use Inertia\Inertia;
 
 class VarianceReviewController extends Controller
 {
-    public function __construct(private VarianceService $varianceService) {}
-
     public function index(Request $request)
     {
-        $reviews = VarianceReview::with([
-            'opnameEntry.item',
-            'reviewer',
-        ])
-            ->when($request->severity, fn($q, $s) => $q->where('severity', $s))
-            ->when($request->status, fn($q, $s) => $q->where('status', $s))
-            ->latest()
-            ->paginate(20);
+        $query = \App\Models\OpnameEntry::with(['item', 'session'])
+            ->where('variance', '!=', 0);
+
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->whereHas('item', function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('item_code', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->has('date')) {
+             $query->whereDate('created_at', $request->date);
+        }
+
+        $variances = $query->latest()
+            ->paginate(20)
+            ->withQueryString();
 
         return Inertia::render('Variances/Index', [
-            'reviews' => $reviews,
+            'variances' => $variances,
+            'filters' => $request->only(['search', 'date']),
         ]);
-    }
-
-    public function approve(Request $request, VarianceReview $review)
-    {
-        if (!$review->canBeReviewed()) {
-            return back()->with('error', 'Review ini tidak bisa disetujui.');
-        }
-
-        $request->validate(['notes' => 'nullable|string|max:1000']);
-
-        $this->varianceService->approve($review, auth()->id(), $request->notes);
-
-        return back()->with('success', 'Variance berhasil disetujui.');
-    }
-
-    public function reject(Request $request, VarianceReview $review)
-    {
-        if (!$review->canBeReviewed()) {
-            return back()->with('error', 'Review ini tidak bisa ditolak.');
-        }
-
-        $request->validate(['notes' => 'nullable|string|max:1000']);
-
-        $this->varianceService->reject($review, auth()->id(), $request->notes);
-
-        return back()->with('success', 'Variance berhasil ditolak.');
     }
 }
